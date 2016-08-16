@@ -1,4 +1,22 @@
 module.exports = {
+  token: null,
+
+  gatekeeperLogin() {
+    window.location = 'https://github.com/login/oauth/authorize?client_id=c2f002feaae356a50b34&redirect_uri=http://localhost:8080/auth-flow/oauth';
+  },
+
+  getToken() {
+    return this.token;
+  },
+
+  setToken(val) {
+    this.token = val;
+  },
+
+  loggedIn() {
+    return !!this.getToken();
+  },
+
   login(email, pass, cb) {
     cb = arguments[arguments.length - 1]
     if (localStorage.token) {
@@ -18,9 +36,9 @@ module.exports = {
     })
   },
 
-  getToken() {
-    return localStorage.token
-  },
+  // getToken() {
+  //   return localStorage.token
+  // },
 
   logout(cb) {
     delete localStorage.token
@@ -28,9 +46,9 @@ module.exports = {
     this.onChange(false)
   },
 
-  loggedIn() {
-    return !!localStorage.token
-  },
+  // loggedIn() {
+  //   return !!localStorage.token
+  // },
 
   onChange() {}
 }

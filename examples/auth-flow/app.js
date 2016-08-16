@@ -5,6 +5,8 @@ import { browserHistory, Router, Route, Link, withRouter } from 'react-router'
 import withExampleBasename from '../withExampleBasename'
 import auth from './auth'
 
+import fetch from 'isomorphic-fetch';
+
 const App = React.createClass({
   getInitialState() {
     return {
@@ -20,7 +22,7 @@ const App = React.createClass({
 
   componentWillMount() {
     auth.onChange = this.updateAuth
-    auth.login()
+    // auth.login()
   },
 
   render() {
@@ -44,6 +46,20 @@ const App = React.createClass({
 })
 
 const Dashboard = React.createClass({
+  componentWillMount () {
+    // make authed call to GH
+    var headers = new Headers();
+    headers.append("Authorization", "token " + auth.getToken());
+    fetch('https://api.github.com/user', {
+      headers: headers
+    })
+    .then(rsp => {
+      rsp.json().then(user => {
+        console.log(user);
+        this.setState({ user })
+      });
+    });
+  },
   render() {
     const token = auth.getToken()
 
@@ -51,7 +67,8 @@ const Dashboard = React.createClass({
       <div>
         <h1>Dashboard</h1>
         <p>You made it!</p>
-        <p>{token}</p>
+        <p>token: {token}</p>
+        <p>user: {this.state ? JSON.stringify(this.state.user) : ''}</p>
       </div>
     )
   }
@@ -69,21 +86,7 @@ const Login = withRouter(
     handleSubmit(event) {
       event.preventDefault()
 
-      const email = this.refs.email.value
-      const pass = this.refs.pass.value
-
-      auth.login(email, pass, (loggedIn) => {
-        if (!loggedIn)
-          return this.setState({ error: true })
-
-        const { location } = this.props
-
-        if (location.state && location.state.nextPathname) {
-          this.props.router.replace(location.state.nextPathname)
-        } else {
-          this.props.router.replace('/')
-        }
-      })
+      auth.gatekeeperLogin();
     },
 
     render() {
@@ -100,6 +103,38 @@ const Login = withRouter(
     }
   })
 )
+
+const OAuth = React.createClass({
+  componentDidMount() {
+    var code = window.location.href.match(/\?code=(.*)/);
+    if (!code || code.length < 1) {
+      this.props.history.push({
+        pathname: 'login-failed',
+        state: { errorResponse: window.location.href }
+      });
+    }
+    code = code[1];
+    fetch('https://open-redistricting-auth.herokuapp.com/authenticate/' + code)
+    .then(rsp => {
+      return rsp.json().then(j => {
+        auth.setToken(j.token);
+        this.props.history.push({
+          pathname: 'dashboard'
+        });
+      });
+    });
+  },
+
+  render() {
+    return <h1>Logging in...</h1>
+  }
+})
+
+const LoginFailed = React.createClass({
+  render() {
+    return <div><h1>Login failed :(</h1><p>{ this.props.history.state }</p></div>
+  }
+})
 
 const About = React.createClass({
   render() {
@@ -131,6 +166,8 @@ render((
     <Route path="/" component={App}>
       <Route path="login" component={Login} />
       <Route path="logout" component={Logout} />
+      <Route path="login-failed" component={LoginFailed} />
+      <Route path="oauth" component={OAuth} />
       <Route path="about" component={About} />
       <Route path="dashboard" component={Dashboard} onEnter={requireAuth} />
     </Route>
