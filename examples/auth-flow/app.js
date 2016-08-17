@@ -14,15 +14,24 @@ const App = React.createClass({
     }
   },
 
-  updateAuth(loggedIn) {
+  updateAuth(token) {
     this.setState({
-      loggedIn
+      loggedIn: !!token
     })
   },
 
   componentWillMount() {
-    auth.onChange = this.updateAuth
-    // auth.login()
+    // TODO weds: get initial login flow working correctly.
+    // what is desired behavior?
+    // - proceed as normal if token is present
+    // - auto-login if authed but token not in sessionStorage
+    // - redirect to login?
+    // ^^^^^ ***** ^^^^^ ?????
+    auth.fetchAccessToken(null, this.updateAuth)
+  },
+
+  componentWillUpdate() {
+    this.updateAuth(auth.getToken())
   },
 
   render() {
@@ -76,28 +85,15 @@ const Dashboard = React.createClass({
 
 const Login = withRouter(
   React.createClass({
-
-    getInitialState() {
-      return {
-        error: false
-      }
-    },
-
     handleSubmit(event) {
       event.preventDefault()
-
-      auth.gatekeeperLogin();
+      auth.authorize();
     },
 
     render() {
       return (
         <form onSubmit={this.handleSubmit}>
-          <label><input ref="email" placeholder="email" defaultValue="joe@example.com" /></label>
-          <label><input ref="pass" placeholder="password" /></label> (hint: password1)<br />
           <button type="submit">login</button>
-          {this.state.error && (
-            <p>Bad login information</p>
-          )}
         </form>
       )
     }
@@ -106,23 +102,21 @@ const Login = withRouter(
 
 const OAuth = React.createClass({
   componentDidMount() {
-    var code = window.location.href.match(/\?code=(.*)/);
-    if (!code || code.length < 1) {
-      this.props.history.push({
-        pathname: 'login-failed',
-        state: { errorResponse: window.location.href }
-      });
-    }
-    code = code[1];
-    fetch('https://open-redistricting-auth.herokuapp.com/authenticate/' + code)
-    .then(rsp => {
-      return rsp.json().then(j => {
-        auth.setToken(j.token);
+    auth.fetchAccessToken(null,
+      () => {
+        // on success
         this.props.history.push({
           pathname: 'dashboard'
         });
-      });
-    });
+      },
+      () => {
+        // on error
+        this.props.history.push({
+          pathname: 'login-failed',
+          state: { errorResponse: window.location.href }
+        });
+      }
+    );
   },
 
   render() {
