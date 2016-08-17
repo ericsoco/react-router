@@ -6,20 +6,18 @@ module.exports = {
     tokenName: 'github-auth'
   },
 
-  authorize() {
-    window.location = 'https://github.com/login/oauth/authorize?client_id=' + this.config.githubAPIClientId + '&redirect_uri=' + this.config.redirectURL;
+  authorize(state) {
+    let authUrl = 'https://github.com/login/oauth/authorize?client_id=' + this.config.githubAPIClientId + '&redirect_uri=' + this.config.redirectURL;
+    if (state) {
+      authUrl += '&state=' + state;
+    }
+    window.location = authUrl;
   },
 
   // TODO: refactor to use Promises
   fetchAccessToken(code, onSuccess, onError) {
-    let accessToken = this.getToken();
-    if (accessToken) {
-      onSuccess(accessToken);
-      return;
-    }
-
     if (!code) {
-      code = window.location.href.match(/\?code=(.*)/);
+      code = window.location.href.match(/code=([^&]*)/);
       if (!code || code.length < 1) {
         onError && onError();
       }
@@ -41,6 +39,9 @@ module.exports = {
   },
 
   setToken(val) {
+    // use session storage rather than local, to avoid problems with stale access tokens.
+    // auth as necessary to get a token if it is not stored in the session --
+    // the auth redirects will be mostly transparent to the user.
     window.sessionStorage[this.config.tokenName] = val;
   },
 

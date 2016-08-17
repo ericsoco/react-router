@@ -8,38 +8,13 @@ import auth from './auth'
 import fetch from 'isomorphic-fetch';
 
 const App = React.createClass({
-  getInitialState() {
-    return {
-      loggedIn: auth.loggedIn()
-    }
-  },
-
-  updateAuth(token) {
-    this.setState({
-      loggedIn: !!token
-    })
-  },
-
-  componentWillMount() {
-    // TODO weds: get initial login flow working correctly.
-    // what is desired behavior?
-    // - proceed as normal if token is present
-    // - auto-login if authed but token not in sessionStorage
-    // - redirect to login?
-    // ^^^^^ ***** ^^^^^ ?????
-    auth.fetchAccessToken(null, this.updateAuth)
-  },
-
-  componentWillUpdate() {
-    this.updateAuth(auth.getToken())
-  },
-
   render() {
+    let loggedIn = auth.loggedIn();
     return (
       <div>
         <ul>
           <li>
-            {this.state.loggedIn ? (
+            {loggedIn ? (
               <Link to="/logout">Log out</Link>
             ) : (
               <Link to="/login">Sign in</Link>
@@ -48,7 +23,7 @@ const App = React.createClass({
           <li><Link to="/about">About</Link></li>
           <li><Link to="/dashboard">Dashboard</Link> (authenticated)</li>
         </ul>
-        {this.props.children || <p>You are {!this.state.loggedIn && 'not'} logged in.</p>}
+        {this.props.children || <p>You are {!loggedIn && 'not'} logged in.</p>}
       </div>
     )
   }
@@ -63,10 +38,17 @@ const Dashboard = React.createClass({
       headers: headers
     })
     .then(rsp => {
-      rsp.json().then(user => {
-        console.log(user);
-        this.setState({ user })
-      });
+      if (rsp.status >= 400) {
+        // bad/expired access token
+        this.props.history.push({
+          pathname: '/login',
+          state: { nextPathname: '/dashboard' }
+        });
+      } else {
+        rsp.json().then(user => {
+          this.setState({ user })
+        });
+      }
     });
   },
   render() {
@@ -85,9 +67,21 @@ const Dashboard = React.createClass({
 
 const Login = withRouter(
   React.createClass({
+    componentWillMount() {
+      this.componentWillUpdate();
+    },
+
+    componentWillUpdate() {
+      const { location } = this.props;
+      let nextPathname = location.state && location.state.nextPathname || '/';
+      this.setState({
+        nextPathname
+      });
+    },
+
     handleSubmit(event) {
       event.preventDefault()
-      auth.authorize();
+      auth.authorize(this.state.nextPathname || null);
     },
 
     render() {
@@ -102,17 +96,28 @@ const Login = withRouter(
 
 const OAuth = React.createClass({
   componentDidMount() {
+    let state = window.location.href.match(/state=([^&]*)/),
+      pathname = '/dashboard';
+    if (state && state.length > 1) {
+      // technically, this is an incorrect use of OAuth2 state,
+      // which is supposed to be used for additional security.
+      // But it's also handy for maintaining state across redirects;
+      // we use it here to redirect the user to the
+      // page that initially requested the auth.
+      pathname = decodeURIComponent(state[1]);
+    }
+
     auth.fetchAccessToken(null,
       () => {
         // on success
         this.props.history.push({
-          pathname: 'dashboard'
+          pathname
         });
       },
       () => {
         // on error
         this.props.history.push({
-          pathname: 'login-failed',
+          pathname: '/login-failed',
           state: { errorResponse: window.location.href }
         });
       }
